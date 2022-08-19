@@ -1,0 +1,12 @@
+vendor/
+SERVER.*
+.idea/*
+app/database/db
+app/database/entities
+app/database/factories
+app/database/schema
+app/core/Environment.php
+app/core/ElectroMagicalExtensions.php
+app/Manifest.php
+data
+/*.php

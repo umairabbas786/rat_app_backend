@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+from monster.android_lib.android_sdk_builder import AndroidSdkBuilder
+from monster.route_creator import RouteCreator
+from monster.schema_entity_dao_factory_creator.dao_generator import DaoGenerator
+from monster.schema_entity_dao_factory_creator.entity_generator import EntityGenerator
+from monster.schema_entity_dao_factory_creator.factory_generator import FactoryGenerator
+from monster.schema_entity_dao_factory_creator.table_schema_generator import TableSchemaGenerator
+from monster.environment_generator import EnvironmentGenerator
+from monster.eevee_config import EeveeConfig
+from monster.manual import HelpManual
+from monster.builders.production_build import ProductionBuild
+from monster.database_class_builder import DatabaseClassBuilder
+from monster.manifest_builder import ManifestBuilder
+from monster.electro_colors import alert_warning
+from monster.electro_colors import alert_info
+from monster.electro_colors import alert_danger
+from monster.electro_colors import text_primary
+from monster.ssh_connection import SshConnection
+from monster.dependencies_checker import DependenciesChecker
+from monster.magical_entity_extensions import MagicalEntityExtensions
+from monster.agent_exceptions_finder import AgentExceptionsFinder
+from monster.agent_push_objects_class_names_analyzer import AgentPushObjectsClassNamesAnalyzer
+
+
+DependenciesChecker().check()
+
+if __name__ != '__main__':
+    sys.exit(alert_info("Eevee can't be run from other scripts."))
+
+PROJECT_ROOT = os.path.abspath('/'.join(__file__.split('/')[:-1]))
+
+EEVEE_CONFIG = EeveeConfig(PROJECT_ROOT)
+
+args = sys.argv[1:]
+
+if len(args) == 0:
+    sys.exit(alert_warning("No arguments were provided, use '-h' for help."))
+
+help_manual = HelpManual()
+help_manual.kill_if_any_invalid_argument(args)
+
+""" Displaying Help Menu """
+if args[0] == '-h':
+    help_manual.show()
+
+""" Displaying Version """
+if args[0] == '-v':
+    print(f"Current Eevee Version is: {text_primary(2.0)}")
+
+# Creating Production Build
+if args[0] == '--build':
+    ManifestBuilder(PROJECT_ROOT, EEVEE_CONFIG, f'{PROJECT_ROOT}/app/Manifest.php').build_manifest()
+    ProductionBuild(EEVEE_CONFIG, PROJECT_ROOT, args)
+
+# Serving Locally
+if args[0] == '--serve':
+    if len(args) == 1:
+        sys.exit(alert_danger('Missing PORT Argument'))
+    if len(args[1]) < 4:
+        sys.exit(alert_warning('Please specify a valid port: Minimum length is 4'))
+    if not args[1].isdigit():
+        sys.exit(alert_warning(f'Invalid PORT: {args[1]}'))
+
+    if not os.path.exists(f'{PROJECT_ROOT}/app/database/db'):
+        os.mkdir(f'{PROJECT_ROOT}/app/database/db')
+
+    if not os.path.exists(f'{PROJECT_ROOT}/app/database/structures'):
+        os.mkdir(f'{PROJECT_ROOT}/app/database/structures')
+
+    for tsf in os.listdir(f'{PROJECT_ROOT}/app/database/structures/'):
+        with open(f'{PROJECT_ROOT}/app/database/structures/{tsf}', 'r') as f:
+            table_structure_content = json.loads(f.read())
+
+            EntityGenerator(
+                PROJECT_ROOT,
+                slug=tsf.split('.json')[0],
+                table_name=table_structure_content['__table_name__'],
+                table_cols=table_structure_content['__cols__']
+            ).create_entity()
+
+            TableSchemaGenerator(
+                PROJECT_ROOT,
+                slug=tsf.split('.json')[0],
+                table_cols=table_structure_content['__cols__']
+            ).create_schema()
+
+            FactoryGenerator(
+                PROJECT_ROOT,
+                slug=tsf.split('.json')[0],
+                table_cols=table_structure_content['__cols__']
+            ).create_factory()
+
+            DaoGenerator(
+                PROJECT_ROOT,
+                slug=tsf.split('.json')[0],
+                table_cols=table_structure_content['__cols__']
+            ).create_dao()
+
+    EnvironmentGenerator(PROJECT_ROOT, EEVEE_CONFIG.get_data_dirs()).build_environment()
+
+    MagicalEntityExtensions(PROJECT_ROOT).create_magical_extensions()
+
+    DatabaseClassBuilder(
+        PROJECT_ROOT,
+        EEVEE_CONFIG.get_local_db_hostname(),
+        EEVEE_CONFIG.get_local_db_username(),
+        EEVEE_CONFIG.get_local_db_password(),
+        EEVEE_CONFIG.get_local_db_name(),
+        f'{PROJECT_ROOT}/app/database/db/AppDB.php'
+    ).build_db()
+
+    ManifestBuilder(PROJECT_ROOT, EEVEE_CONFIG, f'{PROJECT_ROOT}/app/Manifest.php').build_manifest()
+
+    agents = os.listdir(f'{PROJECT_ROOT}/app/agents')
+
+    ''' Re-Assembling Response Validators '''
+    android_sdk_builder = AndroidSdkBuilder(
+        EEVEE_CONFIG,
+        PROJECT_ROOT,
+        EEVEE_CONFIG.get_android_app_package_names()[0]
+    )
+    for agent in agents:
+        analyzer = AgentPushObjectsClassNamesAnalyzer(f'{PROJECT_ROOT}/app/agents/{agent}')
+        analyzer.fetch_agent_content()
+        analyzer.is_all_okay()
+        analyzer.display_names()
+
+        agent_exceptions_finder = AgentExceptionsFinder(f'{PROJECT_ROOT}/app/agents/{agent}')
+        agent_exceptions_finder.fetch_agent_content()
+        agent_exceptions_finder.fetch_all_declared_constants()
+        agent_exceptions_finder.fetch_all_exceptions()
+
+        android_sdk_builder.re_assemble_validator(
+            agent.split('.php')[0],
+            agent_exceptions_finder.get_failure_exceptions(),
+            agent_exceptions_finder.get_all_compromised_exceptions()
+        )
+
+        android_sdk_builder.re_assemble_response(
+            agent.split('.php')[0],
+            agent_exceptions_finder.get_failure_exceptions(),
+            agent_exceptions_finder.get_all_compromised_exceptions()
+        )
+        print('--------------------------------')
+
+    """ Writing Routes content in route files """
+    for agent in agents:
+        RouteCreator(agent).create_route(PROJECT_ROOT)  # Creates route file in project root directory
+
+    for app_pkg_name in EEVEE_CONFIG.get_android_app_package_names():
+        AndroidSdkBuilder(EEVEE_CONFIG, PROJECT_ROOT, app_pkg_name).create_core()
+
+    if len(EEVEE_CONFIG.get_android_app_package_names()) > 0:
+        for app_pkg_name in EEVEE_CONFIG.get_android_app_package_names()[1:]:
+            AndroidSdkBuilder(EEVEE_CONFIG, PROJECT_ROOT, app_pkg_name).make_from_first_pkg_service_response_validator(EEVEE_CONFIG.get_android_app_package_names()[0])
+
+    os.system(f'php -S localhost:{args[1]} -t {PROJECT_ROOT}/')
+
+    for route in list(map(lambda x: RouteCreator(x).get_route_name(), agents)):
+        os.remove(f'{PROJECT_ROOT}/{route}')
+    print("Bye Bye!")
+
+
+if args[0] == '--create-agent':
+    if len(args) == 1:
+        sys.exit(alert_warning('No agent name specified'))
+    if len(args) != 2:
+        sys.exit(alert_danger('Invalid Arguments'))
+    if not args[1][0].isupper():  # if first letter of agent name is not upper
+        sys.exit(alert_warning('Incorrect agent name, it always starts with capital letter.'))
+
+    if os.path.exists(f'{PROJECT_ROOT}/app/agents/{args[1]}.php'):
+        sys.exit(alert_info(f'{args[1]} Agent Already Exist!'))
+
+    with open(f'{PROJECT_ROOT}/app/agents/{args[1]}.php', 'w+') as my_agent:
+        my_agent.write('<?php\n\n')
+        my_agent.write(f'class {args[1]} extends ElectroApi {{\n\n')
+        my_agent.write(f'    protected function onDevise() {{\n')
+        my_agent.write(f'        $this->resSendOK([\n')
+        my_agent.write(f'            \'eevee\' => \'Hi i\\\'m {args[1]} agent.\'\n')
+        my_agent.write(f'        ]);\n')
+        my_agent.write(f'    }}\n')
+        my_agent.write(f'}}\n')
+    ManifestBuilder(PROJECT_ROOT, EEVEE_CONFIG, f'{PROJECT_ROOT}/app/Manifest.php').build_manifest()
+
+    for app_pkg_name in EEVEE_CONFIG.get_android_app_package_names():
+        AndroidSdkBuilder(EEVEE_CONFIG, PROJECT_ROOT, app_pkg_name).create_service_response_validator(args[1])
+
+    print(f'{args[1]} agent created successfully!')
+
+# Creating Table
+if args[0] == '--create-table':
+    if len(args) == 1:
+        sys.exit(alert_warning('No table name specified'))
+    if len(args) != 2:
+        sys.exit(alert_danger('Invalid Arguments'))
+    if not args[1][0].isupper():  # if first letter of agent name is not upper
+        sys.exit(alert_warning('Incorrect table name, it always starts with capital letter.'))
+
+    if os.path.exists(f'{PROJECT_ROOT}/app/database/structures/{args[1]}.json'):
+        sys.exit(alert_info(f'{args[1]} Table Already Exist!'))
+
+    with open(f'{PROJECT_ROOT}/app/database/structures/{args[1]}.json', 'w+') as table_structure_file:
+        table_structure_file.write('{\n')
+        table_structure_file.write(f'    "__table_name__": "{args[1].lower()}s",\n')
+        table_structure_file.write('    "__cols__": [\n')
+        table_structure_file.write('        [ "first_name", "" , 50 ],\n')
+        table_structure_file.write('        [ "last_name", "" , 50 ],\n')
+        table_structure_file.write('        [ "username", "" , 50 ],\n')
+        table_structure_file.write('        [ "email", "" , 50 ],\n')
+        table_structure_file.write('        [ "magician_cipher", "" , 150 ],\n')
+        table_structure_file.write('        [ "magician_iv", "" , 50 ],\n')
+        table_structure_file.write('        [ "magician_key", "" , 50 ],\n')
+        table_structure_file.write('        [ "magician_abracadabra", "" , 40 ],\n')
+        table_structure_file.write('        [ "fcm_token?", "" , 170 , null],\n')
+        table_structure_file.write('        [ "account_verified" , true , null, false],\n')
+        table_structure_file.write('        [ "blocked" , true , null, false],\n')
+        table_structure_file.write('        [ "posts", 1 , null, 0],\n')
+        table_structure_file.write('        [ "rating", 5.0, 170 , 0.0]\n')
+        table_structure_file.write('    ]\n')
+        table_structure_file.write('} \n')
+    print(f'{args[1]} structure has been created successfully!')
+
+if args[0] == '--glance':
+    if len(args) == 1:
+        sys.exit(alert_danger('Missing Agent Name Argument'))
+    if '.php' in args[1]:
+        args[1] = args[1].split('.php')[0]
+    if args[1] == '':
+        sys.exit(alert_danger('Invalid Name Argument'))
+    if not os.path.exists(f'{PROJECT_ROOT}/app/agents/{args[1]}.php'):
+        print(args[1])
+        sys.exit(alert_warning(f'No agent found with name: {args[1]}'))
+
+    analyzer = AgentPushObjectsClassNamesAnalyzer(f'{PROJECT_ROOT}/app/agents/{args[1]}.php')
+    analyzer.fetch_agent_content()
+    analyzer.is_all_okay()
+    analyzer.display_names()
+
+# Creating Production Build
+if args[0] == '--ftp':
+    print("Connecting To Ftp Client")
+    print(f'FTP USERNAME: {EEVEE_CONFIG.get_ftp_username()}')
+    print(f'FTP PASSWORD: {EEVEE_CONFIG.get_ftp_password()}')
+    os.system(f'ftp {EEVEE_CONFIG.get_ftp_hostname()}')
+
+
+# Launch SSH Connection
+if args[0] == '--ssh':
+    SshConnection(EEVEE_CONFIG).connect()
+
+# todo: Add checks for proper validation of user schema, if wrong provided.

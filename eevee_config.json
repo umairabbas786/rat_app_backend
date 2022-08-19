@@ -1,0 +1,66 @@
+{
+    "__local_database__": {
+        "__hostname__": "localhost",
+        "__username__": "root",
+        "__password__": "",
+        "__database__": "electro_db"
+    },
+    "__production_database__": {
+        "__hostname__": "localhost",
+        "__username__": "eevee",
+        "__password__": "eevee",
+        "__database__": "electro_db"
+    },
+    "__ftp_config__": {
+        "__hostname__": "hello.com",
+        "__username__": "eevee",
+        "__password__": "eevee"
+    },
+    "__ssh_config__": {
+        "__hostname__": "hello.com",
+        "__username__": "eevee",
+        "__password__": "eevee",
+        "__port__": "22"
+    },
+    "__env__": [
+        [
+            "__api_key__",
+            "hi,-its-eevee. I can do wonderful things in api creation."
+        ],
+        [
+            "__debug_mode__",
+            true
+        ],
+        [
+            "__maintenance_mode__",
+            false
+        ],
+        [
+            "__fcm_server_api_key__",
+            "TODO: Please Add FCM KEY"
+        ]
+    ],
+    "__data_dirs__": [
+        [
+            "UserAvatarImage",
+            "/images/user_avatars"
+        ],
+        [
+            "ProductImage",
+            "/images/products"
+        ],
+        [
+            "StatusVideo",
+            "/videos/user_statuses"
+        ]
+    ],
+    "__android_app_config__": {
+        "__package_names__": [
+            "com.electrodragon.rat_app",
+            "com.electrodragon.rat_app_admin"
+        ],
+        "__tink_master_key__": "7b227072696d6172794b65794964223a313837383230353535382c226b6579223a5b7b226b657944617461223a7b227479706555726c223a22747970652e676f6f676c65617069732e636f6d2f676f6f676c652e63727970746f2e74696e6b2e41657347636d4b6579222c2276616c7565223a22476944724d685963634531347749714f4a50375946656b4370585550344b6a71556150513557534c6f72504e42413d3d222c226b65794d6174657269616c54797065223a2253594d4d4554524943227d2c22737461747573223a22454e41424c4544222c226b65794964223a313837383230353535382c226f757470757450726566697854797065223a2254494e4b227d5d7d",
+        "__secret_key__": "TJUA4THX8L7UXNSI9QYAMY6DCM55O7LWW1PHXJGX3BIICNPK42US4S2UIUKKG0Z905FG66",
+        "__server_base_url__": "https://api.rat_app.com/"
+    }
+}
