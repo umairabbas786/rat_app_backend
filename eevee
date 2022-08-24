@@ -133,17 +133,6 @@ if args[0] == '--serve':
         agent_exceptions_finder.fetch_all_declared_constants()
         agent_exceptions_finder.fetch_all_exceptions()
 
-        android_sdk_builder.re_assemble_validator(
-            agent.split('.php')[0],
-            agent_exceptions_finder.get_failure_exceptions(),
-            agent_exceptions_finder.get_all_compromised_exceptions()
-        )
-
-        android_sdk_builder.re_assemble_response(
-            agent.split('.php')[0],
-            agent_exceptions_finder.get_failure_exceptions(),
-            agent_exceptions_finder.get_all_compromised_exceptions()
-        )
         print('--------------------------------')
 
     """ Writing Routes content in route files """

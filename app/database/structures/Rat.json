@@ -1,0 +1,13 @@
+{
+    "__table_name__": "rats",
+    "__cols__": [
+        [ "name", "" , 250 ],
+        [ "date_of_birth", "" , 250 ],
+        [ "date_joined", "" , 250 ],
+        [ "gender", "" , 50 ],
+        [ "breed", "" , 150 ],
+        [ "color", "" , 500 ],
+        [ "medical_history", "" , 500 ],
+        [ "gallery", "" , 1000 ]
+    ]
+} 
